@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- Only this page's own scripts run (dev/site.js fills in their hashes), so markup that slips
      into the page from a server response can't run code. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nKQBaof/g1ZdNKTa1HPcygqJ2Q0u3vIKPYDnTtAx2NI='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FhUP3lBLCN1KwPBVRhcdbb56SdPJkbcuYlCiiYcumsg='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cantor Scheduler</title>
@@ -278,7 +278,7 @@
   // name their own script (?s=deployment ID); otherwise it's this installation's, built in.
   const SHARED = true;
   // The newest library build, on the shared page: a director whose copy runs an older one is told.
-  const LATEST_BUILD = '71973d55328c81c2';
+  const LATEST_BUILD = 'c98f3cd85f67a490';
   const PARAMS = new URLSearchParams(location.search);
   const KEY = PARAMS.get('k') || '';
   const SCRIPT = /^AKfy[\w-]{20,}$/.test(PARAMS.get('s') || '') ? PARAMS.get('s') : '';
@@ -615,12 +615,29 @@
     if (panel === 'settings') {
       return (state.needsSetup ? '<div class="welcome"><h2>Welcome!</h2>First, tell it about your parish (below) and click ' +
         '<strong>Save parish</strong>. Then add your cantors with the <strong>Cantor list</strong> button.</div>' : '') +
-        (state.needsSetup ? parishPanel() + personalPanel() : personalPanel() + parishPanel()) +
+        (state.needsSetup ? parishPanel() + personalPanel() : personalPanel() + parishPanel() + linkPanel()) +
         // The steps are all in Google's own screens (the script can't delete itself), so they're in the guide.
         (SHARED ? '<p class="sub" style="margin-top:14px">Done with Cantor Scheduler? <a href="' + esc(location.pathname) +
           '#remove" target="_blank" rel="noopener">How to remove it</a></p>' : '');
     }
     return morePanels();
+  }
+
+  // A new key for the director's link, for when it got out. Copies on an older library can't make
+  // one, so it's offered only when the script says it can.
+  function linkPanel() {
+    if (!state.canMakeNewLink) return '';
+    return '<div class="panel"><h3>Your director link</h3><p class="sub" style="margin:0 0 10px">Anyone with this ' +
+      'page’s link can manage the schedule. If it got out, make a new one: the old one stops working right away, ' +
+      'and this page switches to the new one.</p>' +
+      '<button data-act="newLink" data-confirm="Tap again to replace it">Make a new director link</button></div>';
+  }
+
+  // After a new director link is made: open it, so this tab doesn't keep the old one.
+  function openNewLink(key) {
+    const p = new URLSearchParams(location.search);
+    p.set('k', key);
+    location.replace(location.pathname + '?' + p + '#new-link');
   }
 
   const DAY_NAMES = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -714,6 +731,7 @@
     show(busyText, 0);
     try {
       const s = await api(fn, args);
+      if (s.newKey) return openNewLink(s.newKey);
       state = s;
       if (!s.message && onOk) onOk();
       render();
@@ -752,6 +770,10 @@
       state = await api('getState');
       if (first && state.needsSetup) panel = 'settings';
       render();
+      if (location.hash === '#new-link') {
+        history.replaceState(null, '', location.pathname + location.search);
+        show('This is your new director link. Bookmark it now: the old one no longer works.', 12000);
+      }
     } catch (err) {
       if (!state) document.getElementById('app').innerHTML = '<p class="empty">' + esc(err.message) + '</p>';
     }
@@ -821,6 +843,7 @@
     else if (act === 'remove') call('removeMass', [id]);
     else if (act === 'restore') call('restoreMass', [id]);
     else if (act === 'removeCantor') call('removeCantor', [code]);
+    else if (act === 'newLink') call('newDirectorLink');
     else if (act === 'copy') copy(v, b);
     else if (act === 'go') go(v);
     else if (act === 'addMassRow') document.getElementById('massRows').insertAdjacentHTML('beforeend', massRow({ day: 'Sunday', time: '' }));
