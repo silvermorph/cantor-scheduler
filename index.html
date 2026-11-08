@@ -138,6 +138,16 @@
   .guide .callout { background: #fff8e1; border: 1px solid #f1d58a; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
   .guide .copy { display: inline-block; background: var(--blue); color: #fff; font-weight: 600; text-decoration: none; padding: 10px 16px; border-radius: 6px; margin: 4px 0; }
   .guide small { color: var(--muted); }
+  .guide .steps { margin-top: 8px; padding-left: 22px; }
+  .guide .steps li { margin-bottom: 6px; }
+  /* A sketch of the top of the Apps Script window, to show where Deploy is. */
+  .guide .shot { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 460px;
+    margin: 8px 0 4px; padding: 8px 10px; background: #f8f9fa; border: 1px solid #dadce0; border-radius: 8px;
+    font-size: 13px; color: #5f6368; }
+  .guide .shot b { color: #202124; font-weight: 500; }
+  .guide .shot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .guide .shot-btn { flex: none; background: #1a73e8; color: #fff; font-weight: 600; padding: 6px 14px;
+    border-radius: 18px; box-shadow: 0 0 0 3px #fbbc04; }
 </style>
 </head>
 <body>
@@ -159,12 +169,26 @@
     <li><strong>Make your copy.</strong><br>
       <a class="copy" href="https://docs.google.com/spreadsheets/d/1ZePVq8SyScKICWgPUAJjdw_5RV-XcYSahBrC_TZFCcg/copy" target="_blank" rel="noopener">Copy the template Sheet</a><br>
       Then click <span class="menu">Make a copy</span>. Keep the copy's name or rename it; either is fine.</li>
-    <li><strong>Turn it on.</strong> In your copy, choose <span class="menu">Extensions ▸ Apps Script</span>.
-      In the window that opens, click <span class="menu">Deploy ▸ New deployment</span>. Click the gear next to
-      "Select type" and choose <span class="menu">Web app</span>. Set <span class="menu">Execute as: Me</span> and
-      <span class="menu">Who has access: Anyone</span>, then click <span class="menu">Deploy</span>.</li>
+    <li><strong>Turn it on.</strong>
+      <ol type="a" class="steps">
+        <li>In your copy, choose <span class="menu">Extensions ▸ Apps Script</span>. Apps Script opens in a new tab.</li>
+        <li>Click the blue <span class="menu">Deploy</span> button at the <strong>top right</strong> of that tab, then
+          <span class="menu">New deployment</span>.
+          <div class="shot" aria-hidden="true">
+            <span class="shot-name">Apps Script &nbsp;<b>Copy of Cantor Scheduler</b></span>
+            <span class="shot-btn">Deploy ▾</span>
+          </div></li>
+        <li>Click the gear next to "Select type" and choose <span class="menu">Web app</span>.</li>
+        <li>Set <span class="menu">Execute as: Me</span>.</li>
+        <li>Set <span class="menu">Who has access: Anyone</span>.</li>
+        <li>Click <span class="menu">Deploy</span>.</li>
+      </ol></li>
     <li><strong>Approve it.</strong> Google asks you to authorize access. Click
       <span class="menu">Authorize access</span> and pick your account.
+      <div class="callout"><strong>"The OAuth client is not fully created yet"?</strong> Google is still setting up
+        your new copy. Wait 5–10 minutes, then check <span class="menu">Deploy ▸ Manage deployments</span>: if a
+        deployment is listed, use that one (click it, then <span class="menu">Edit</span> ▸
+        <span class="menu">Deploy</span>); otherwise do <span class="menu">Deploy ▸ New deployment</span> again.</div>
       <div class="callout"><strong>Expect a security warning.</strong> Google will say
         <em>"Google hasn't verified this app."</em> That's normal for a script you run yourself. Click
         <span class="menu">Advanced</span>, then <span class="menu">Go to Cantor Scheduler (unsafe)</span>, then
@@ -186,7 +210,7 @@
   <p>Your director page says when there's a new version. To update, in your Sheet choose
   <span class="menu">Extensions ▸ Apps Script</span>. On the left under <span class="menu">Libraries</span>, click
   <span class="menu">CantorScheduler</span>, pick the highest version, and click <span class="menu">Save</span>. Then
-  <span class="menu">Deploy ▸ Manage deployments</span>, click the pencil, set <span class="menu">Version: New version</span>,
+  click the blue <span class="menu">Deploy</span> button at the top right ▸ <span class="menu">Manage deployments</span>, click the pencil, set <span class="menu">Version: New version</span>,
   and click <span class="menu">Deploy</span>. Your links stay the same. If Google asks you to approve it again, it's the
   same as when you set it up (step 4).</p>
 </section>
