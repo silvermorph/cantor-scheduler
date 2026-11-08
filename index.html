@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- Only this page's own scripts run (dev/site.js fills in their hashes), so markup that slips
      into the page from a server response can't run code. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Wv8gB0g4AhHDZABLypstR1Sfy5bxg/kb6cnlqi2Qrro='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nKQBaof/g1ZdNKTa1HPcygqJ2Q0u3vIKPYDnTtAx2NI='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cantor Scheduler</title>
@@ -142,9 +142,10 @@
   .guide .copy { display: inline-block; background: var(--blue); color: #fff; font-weight: 600; text-decoration: none; padding: 10px 16px; border-radius: 6px; margin: 4px 0; }
   .guide small { color: var(--muted); }
   .guide { max-width: 560px; margin: 0 auto; padding: 18px 16px 60px; }
-  /* From the update notice (#updates), the guide shows only the update steps. */
-  .guide .updates-title, .guide.only-updates .install-part, .guide.only-updates .updates-head { display: none; }
-  .guide.only-updates .updates-title { display: block; }
+  /* From the update notice (#updates) or Settings (#remove), the guide shows only those steps, under their own title. */
+  .guide .part-title, .guide.only-updates > :not(.updates-part), .guide.only-remove > :not(.remove-part),
+  .guide.only-updates .part-head, .guide.only-remove .part-head { display: none; }
+  .guide.only-updates .part-title, .guide.only-remove .part-title { display: block; }
   .guide:not(.only-updates) .to-setup { display: none; }
   .guide .steps { margin-top: 8px; padding-left: 22px; }
   .guide .steps li { margin-bottom: 6px; }
@@ -215,8 +216,9 @@
   </ol>
 </div>
 
-  <h2 id="updates" class="updates-head">Getting updates</h2>
-  <h1 class="updates-title">Update your Cantor Scheduler</h1>
+<div class="updates-part">
+  <h2 id="updates" class="part-head">Getting updates</h2>
+  <h1 class="part-title">Update your Cantor Scheduler</h1>
   <p>Your director page says when there's a new version. Updating takes a few minutes, on a computer. Your links
   stay the same.</p>
   <ol>
@@ -236,6 +238,36 @@
     <li>Reload your director page. The update notice goes away.</li>
   </ol>
   <p class="to-setup"><a href="#setup">Setting up a new copy instead? See the setup guide.</a></p>
+</div>
+
+<div class="remove-part">
+  <h2 id="remove" class="part-head">Removing it</h2>
+  <h1 class="part-title">Remove Cantor Scheduler</h1>
+  <p>Everything it keeps is in your copy of the Sheet, so removing it takes a few minutes in your own Google
+  account, on a computer. Do the steps in order: the Sheet's script keeps working until the last ones.</p>
+  <div class="callout"><strong>Want to keep the schedule?</strong> In your Sheet, choose
+    <span class="menu">File ▸ Download ▸ Microsoft Excel</span> first.</div>
+  <ol>
+    <li><strong>Turn off the digest.</strong> On your director page, open <span class="menu">Settings</span>, uncheck
+      <span class="menu">Email me a digest</span>, and click <span class="menu">Save</span>. It runs on a timer, so it
+      would keep going after the links stop.
+      <br><small>No director link anymore? In Apps Script (next step), click the clock on the left
+      (<span class="menu">Triggers</span>) and delete the one there.</small></li>
+    <li><strong>Stop the links.</strong> In your Sheet, choose <span class="menu">Extensions ▸ Apps Script</span>. Click
+      <span class="menu">Deploy ▸ Manage deployments</span>, pick your web app on the left, click
+      <span class="menu">Archive</span>, and confirm. Every cantor and director link stops working.</li>
+    <li><strong>Delete the Sheet for good.</strong> In Google Drive, right-click the Sheet and choose
+      <span class="menu">Move to trash</span>. Then open <span class="menu">Trash</span>, right-click it, and choose
+      <span class="menu">Delete forever</span>.
+      <div class="callout">Don't stop at the trash: a Sheet's script keeps working while it's in there, until Drive
+        empties it 30 days later.</div></li>
+    <li><strong>Remove its access to your account.</strong> Go to
+      <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">myaccount.google.com/connections</a>,
+      choose Cantor Scheduler (its name may start with "Copy of"), and delete its connection.</li>
+  </ol>
+  <p>Emails it sent stay in your Gmail's Sent folder. Nothing about your parish is kept anywhere outside your own
+  Google account.</p>
+</div>
 </section>
 <div id="status"></div>
 <dialog id="pastDlg"><p>This period is already complete. Return to the current sign-up period?</p>
@@ -583,7 +615,10 @@
     if (panel === 'settings') {
       return (state.needsSetup ? '<div class="welcome"><h2>Welcome!</h2>First, tell it about your parish (below) and click ' +
         '<strong>Save parish</strong>. Then add your cantors with the <strong>Cantor list</strong> button.</div>' : '') +
-        (state.needsSetup ? parishPanel() + personalPanel() : personalPanel() + parishPanel());
+        (state.needsSetup ? parishPanel() + personalPanel() : personalPanel() + parishPanel()) +
+        // The steps are all in Google's own screens (the script can't delete itself), so they're in the guide.
+        (SHARED ? '<p class="sub" style="margin-top:14px">Done with Cantor Scheduler? <a href="' + esc(location.pathname) +
+          '#remove" target="_blank" rel="noopener">How to remove it</a></p>' : '');
     }
     return morePanels();
   }
@@ -695,10 +730,12 @@
       document.getElementById('app').hidden = true;
       const guide = document.getElementById('guide');
       guide.hidden = false;
-      // #updates (the update notice's link) shows just the update steps; anything else, the whole guide.
+      // #updates (the update notice's link) and #remove (Settings') show just those steps; anything else, the whole guide.
       const place = () => {
-        guide.classList.toggle('only-updates', location.hash === '#updates');
-        const target = location.hash && location.hash !== '#updates' && document.getElementById(location.hash.slice(1));
+        const only = ['#updates', '#remove'].includes(location.hash) ? location.hash.slice(1) : '';
+        guide.classList.toggle('only-updates', only === 'updates');
+        guide.classList.toggle('only-remove', only === 'remove');
+        const target = location.hash && !only && document.getElementById(location.hash.slice(1));
         if (target) target.scrollIntoView();
         else window.scrollTo(0, 0);
       };
