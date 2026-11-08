@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Only this page's own scripts run (dev/site.js fills in their hashes), so markup that slips
+     into the page from a server response can't run code. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Wv8gB0g4AhHDZABLypstR1Sfy5bxg/kb6cnlqi2Qrro='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cantor Scheduler</title>
@@ -354,7 +357,7 @@
     const past = p.status === 'past';
     const tool = (id, label) => '<button class="' + (panel === id ? 'on' : '') + '" data-act="panel" data-v="' + id + '">' + label + '</button>';
     const side = (s, dir) => !s ? '<span></span>' :
-      '<button class="side ' + dir + (s.status === 'past' ? ' past' : '') + '" data-act="go" data-v="' + s.start + '">' +
+      '<button class="side ' + dir + (s.status === 'past' ? ' past' : '') + '" data-act="go" data-v="' + esc(s.start) + '">' +
       '<span><span class="nw">' + (dir === 'prev' ? '‹ ' : '') + md(s.start) + ' –</span> <span class="nw">' + md(s.end) + (dir === 'next' ? ' ›' : '') + '</span></span>' +
       '<small>' + { past: 'Past', open: 'Current', upcoming: 'Upcoming' }[s.status] + '</small></button>';
     const sub = past ? 'Past' : p.status === 'open' ? 'Open now' : 'Opens ' + dayLabel(p.opens.slice(0, 10)) + ', ' + time12(p.opens.slice(11));
@@ -544,7 +547,7 @@
       const usual = w.cantors.filter((c) => c.email).map((c) => c.code);
       return '<div class="panel"><p class="sub intro">One email to everyone checked, starting with who’s singing which Mass that week (Monday through Sunday). Replies come to your email in Settings.</p><form data-form="sendWeekend">' +
         '<label class="full">Weekend<select name="weekendSat">' +
-        weeks.map((x) => '<option value="' + x.sat + '"' + (x.sat === w.sat ? ' selected' : '') + '>' + weekendLabel(x.sat) + '</option>').join('') + '</select></label>' +
+        weeks.map((x) => '<option value="' + esc(x.sat) + '"' + (x.sat === w.sat ? ' selected' : '') + '>' + weekendLabel(x.sat) + '</option>').join('') + '</select></label>' +
         recipientPicker(usual, w.cantors.map((c) => c.code)) +
         '<label class="full">Subject<input name="subject" value="' + esc(d.subject == null ? 'Music for ' + weekendLabel(w.sat) : d.subject) + '"></label>' +
         richText('Message', d.message == null ? esc(music).replace(/\n/g, '<br>') : d.message) +
@@ -818,8 +821,9 @@
   });
 
   document.addEventListener('submit', (e) => {
-    e.preventDefault();
     const f = e.target;
+    if (f.method === 'dialog') return; // the browser closes the dialog with the button's value
+    e.preventDefault();
     const val = (n) => f.elements[n].value.trim();
     if (f.dataset.form === 'addMass') {
       const name = val('pick') === '__other' ? val('custom') : val('pick');
