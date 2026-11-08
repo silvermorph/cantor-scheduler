@@ -193,12 +193,13 @@
         <span class="menu">Allow</span>.<br><small>It asks to: see and edit this one Sheet; send email as you (the
         sign-up emails); run on a timer (the optional digest); and see your email address (to fill in Settings). It
         can't see your other files.</small></div></li>
-    <li><strong>Get your director link.</strong> When Google says the deployment is done, click
-      <span class="menu">Done</span>. Go back to your Sheet and reload it. A <span class="menu">Cantors</span> menu
-      appears (it can take a few seconds). Choose <span class="menu">Cantors ▸ Director link</span> and open the link
-      it gives you. Bookmark it and keep it private: it's how you manage the schedule.
-      <br><small>If it asks for the Web app URL instead: in Apps Script, click <span class="menu">Deploy ▸ Manage
-      deployments</span> and copy the URL that ends in <code>/exec</code>.</small></li>
+    <li><strong>Copy the Web app URL</strong> that Google shows when it's done (it ends in <code>/exec</code>),
+      then click <span class="menu">Done</span>. Your copy needs it in the next step to make links that work.
+      <br><small>Lost it? In Apps Script, <span class="menu">Deploy ▸ Manage deployments</span> shows it.</small></li>
+    <li><strong>Get your director link.</strong> Go back to your Sheet and reload it. A
+      <span class="menu">Cantors</span> menu appears (it can take a few seconds). Choose
+      <span class="menu">Cantors ▸ Director link</span>, paste the URL from step 5, and open the link it gives you.
+      Bookmark it and keep it private: it's how you manage the schedule.</li>
     <li><strong>Set up your parish.</strong> The director page opens on Settings: enter your parish's name, Mass
       times, and time zone. Then add your cantors (<span class="menu">Cantor list</span>) and send them their
       links (<span class="menu">Sign-up links</span>).</li>
@@ -221,7 +222,7 @@
   // name their own script (?s=deployment ID); otherwise it's this installation's, built in.
   const SHARED = true;
   // The newest library build, on the shared page: a director whose copy runs an older one is told.
-  const LATEST_BUILD = 'a182e1b688e92ed8';
+  const LATEST_BUILD = '71973d55328c81c2';
   const PARAMS = new URLSearchParams(location.search);
   const KEY = PARAMS.get('k') || '';
   const SCRIPT = /^AKfy[\w-]{20,}$/.test(PARAMS.get('s') || '') ? PARAMS.get('s') : '';
