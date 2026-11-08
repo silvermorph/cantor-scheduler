@@ -138,6 +138,10 @@
   .guide .callout { background: #fff8e1; border: 1px solid #f1d58a; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
   .guide .copy { display: inline-block; background: var(--blue); color: #fff; font-weight: 600; text-decoration: none; padding: 10px 16px; border-radius: 6px; margin: 4px 0; }
   .guide small { color: var(--muted); }
+  /* From the update notice (#updates), the guide shows only the update steps. */
+  .guide .updates-title, .guide.only-updates .install-part, .guide.only-updates .updates-head { display: none; }
+  .guide.only-updates .updates-title { display: block; }
+  .guide:not(.only-updates) .to-setup { display: none; }
   .guide .steps { margin-top: 8px; padding-left: 22px; }
   .guide .steps li { margin-bottom: 6px; }
   /* A sketch of the top of the Apps Script window, to show where Deploy is. */
@@ -154,6 +158,7 @@
 <header class="bar"><div><strong>Cantor Scheduler</strong><span id="who"></span></div></header>
 <main id="app"></main>
 <section id="guide" class="guide" hidden>
+<div class="install-part">
   <h1>Cantor Scheduler</h1>
   <p>Cantors sign up for Masses from a personal link: no accounts, no passwords. The director sees the whole
   schedule, fills gaps, notes each week's music, and emails cantors from the same page.</p>
@@ -161,7 +166,7 @@
   you own, and emails go out from your Gmail. Nobody else, including whoever made this, can see your Sheet.</p>
   <p class="sub">Got here from a cantor link that didn't work? Ask your choir director for a new one.</p>
 
-  <h2>Set it up for your parish</h2>
+  <h2 id="setup">Set it up for your parish</h2>
   <p>About 10 minutes, all in your web browser. Use a computer, not a phone.</p>
   <ol>
     <li><strong>Sign in to Google</strong> with the account that should own the schedule. Emails to cantors come
@@ -204,17 +209,29 @@
       times, and time zone. Then add your cantors (<span class="menu">Cantor list</span>) and send them their
       links (<span class="menu">Sign-up links</span>).</li>
   </ol>
+</div>
 
-  <h2 id="updates">Getting updates</h2>
-  <p>Your director page says when there's a new version. To update, in your Sheet choose
-  <span class="menu">Extensions ▸ Apps Script</span>. On the left under <span class="menu">Libraries</span>, click
-  <span class="menu">CantorScheduler</span>, pick the highest version, and click <span class="menu">Save</span>. Then
-  click the blue <span class="menu">Deploy</span> button at the top right ▸ <span class="menu">Manage deployments</span>, click the pencil,
-  open the <span class="menu">Version</span> list and choose <span class="menu">New version</span>, and click
-  <span class="menu">Deploy</span>. Always choose <strong>New version</strong>, even if the version already shown
-  looks current: those numbers count your own deployments, not CantorScheduler's versions, and only a new one
-  picks up the library you just saved. Your links stay the same. If Google asks you to approve it again, it's the
-  same as when you set it up (step 4).</p>
+  <h2 id="updates" class="updates-head">Getting updates</h2>
+  <h1 class="updates-title">Update your Cantor Scheduler</h1>
+  <p>Your director page says when there's a new version. Updating takes a few minutes, on a computer. Your links
+  stay the same.</p>
+  <ol>
+    <li>In your Sheet, choose <span class="menu">Extensions ▸ Apps Script</span>. Apps Script opens in a new tab.</li>
+    <li>On the left under <span class="menu">Libraries</span>, click <span class="menu">CantorScheduler</span>. Pick the
+      highest version and click <span class="menu">Save</span>.</li>
+    <li>Click the blue <span class="menu">Deploy</span> button at the top right, then
+      <span class="menu">Manage deployments</span>.</li>
+    <li>Click the pencil to edit the deployment.</li>
+    <li>Open the <span class="menu">Version</span> list and choose <span class="menu">New version</span>.
+      <div class="callout">Choose <strong>New version</strong> even if the version already shown looks current. Those
+        numbers count your own deployments, not CantorScheduler's versions, and only a new one picks up the library
+        you just saved.</div></li>
+    <li>Click <span class="menu">Deploy</span>. If Google asks you to approve it again, click
+      <span class="menu">Advanced</span>, then <span class="menu">Go to Cantor Scheduler (unsafe)</span>, then
+      <span class="menu">Allow</span>, as when you set it up.</li>
+    <li>Reload your director page. The update notice goes away.</li>
+  </ol>
+  <p class="to-setup"><a href="#setup">Setting up a new copy instead? See the setup guide.</a></p>
 </section>
 <div id="status"></div>
 <dialog id="pastDlg"><p>This period is already complete. Return to the current sign-up period?</p>
@@ -672,10 +689,17 @@
   async function load() {
     if (!KEY && SHARED) {
       document.getElementById('app').hidden = true;
-      document.getElementById('guide').hidden = false;
-      // The guide was hidden when the browser looked for #updates, so go there now.
-      const target = location.hash && document.getElementById(location.hash.slice(1));
-      if (target) target.scrollIntoView();
+      const guide = document.getElementById('guide');
+      guide.hidden = false;
+      // #updates (the update notice's link) shows just the update steps; anything else, the whole guide.
+      const place = () => {
+        guide.classList.toggle('only-updates', location.hash === '#updates');
+        const target = location.hash && location.hash !== '#updates' && document.getElementById(location.hash.slice(1));
+        if (target) target.scrollIntoView();
+        else window.scrollTo(0, 0);
+      };
+      window.addEventListener('hashchange', place);
+      place();
       return;
     }
     if (!KEY || !API_URL) {
