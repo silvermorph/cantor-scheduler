@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- Only this page's own scripts run (dev/site.js fills in their hashes), so markup that slips
      into the page from a server response can't run code. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FhUP3lBLCN1KwPBVRhcdbb56SdPJkbcuYlCiiYcumsg='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wSYcMourBPtYLB55GZ6hsdltW6w5R5T84S2CbW5WSro='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cantor Scheduler</title>
@@ -38,6 +38,15 @@
   .mass.mine { background: var(--tint); border-color: var(--tint-line); box-shadow: inset 4px 0 0 var(--blue); }
   .mass.full { background: var(--green-bg); border-color: var(--green-line); }
   .mass.removed { opacity: .55; }
+  /* Backing up a Mass: someone else is singing it, and you take over if they can't. */
+  .mass.standby { box-shadow: inset 4px 0 0 var(--tint-line); }
+  .backup { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+  .chip.standby { background: none; box-shadow: inset 0 0 0 1px var(--tint-line); font-weight: 400; }
+  /* Above each week: who can't make it, and a way to say you can't. */
+  .cant { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 18px 0 0; font-size: 14px; color: var(--muted); }
+  .cant span { flex: 1 1 200px; }
+  .cant button { padding: 6px 12px; font-size: 14px; }
+  .cantline { margin: 8px 0 0; }
   .check { width: 26px; height: 26px; border-radius: 50%; background: var(--green); color: #fff; display: inline-flex; align-items: center; justify-content: center; margin: 0 6px; }
   .check svg { width: 15px; height: 15px; }
   .time { width: 76px; flex: none; font-weight: 600; white-space: nowrap; }
@@ -270,6 +279,7 @@
 </div>
 </section>
 <div id="status"></div>
+<dialog id="askDlg"><p id="askText"></p><form method="dialog" id="askBtns"></form></dialog>
 <dialog id="pastDlg"><p>This period is already complete. Return to the current sign-up period?</p>
   <form method="dialog"><button value="cancel" class="quiet">Cancel</button><button value="ok" class="primary">OK</button></form></dialog>
 
@@ -278,9 +288,11 @@
   // name their own script (?s=deployment ID); otherwise it's this installation's, built in.
   const SHARED = true;
   // The newest library build, on the shared page: a director whose copy runs an older one is told.
-  const LATEST_BUILD = 'c98f3cd85f67a490';
+  const LATEST_BUILD = 'dac3c5fa3405404c';
   const PARAMS = new URLSearchParams(location.search);
   const KEY = PARAMS.get('k') || '';
+  // From the reminder email's "can't sing this weekend" link: that week's Saturday.
+  const CANT = /^\d{4}-\d\d-\d\d$/.test(PARAMS.get('cant') || '') ? PARAMS.get('cant') : '';
   const SCRIPT = /^AKfy[\w-]{20,}$/.test(PARAMS.get('s') || '') ? PARAMS.get('s') : '';
   const API_URL = SCRIPT ? 'https://script.google.com/macros/s/' + SCRIPT + '/exec' : '';
   let state = null;
@@ -322,10 +334,11 @@
   const range = (b) => md(b.start) + ' – ' + md(b.end);
   const addDays = (ymd, n) => new Date(parse(ymd).getTime() + n * 864e5).toISOString().slice(0, 10);
   const satOf = (ymd) => new Date(weekOf(ymd) + 5 * 864e5).toISOString().slice(0, 10);
-  const weekendLabel = (sat) => {
-    const sun = addDays(sat, 1);
-    return sat.slice(5, 7) === sun.slice(5, 7) ? md(sat) + '–' + parse(sun).getUTCDate() : md(sat) + ' – ' + md(sun);
-  };
+  const span = (a, b) => a.slice(5, 7) === b.slice(5, 7) ? md(a) + '–' + parse(b).getUTCDate() : md(a) + ' – ' + md(b);
+  const weekendLabel = (sat) => span(sat, addDays(sat, 1));
+  // "the weekend of Dec 19–20", or "the week of Dec 21–27" when it has a weekday Mass too.
+  const weekLabel = (sat, masses) => masses.some((m) => satOf(m.date) === sat && m.date < sat)
+    ? 'the week of ' + span(addDays(sat, -5), addDays(sat, 1)) : 'the weekend of ' + weekendLabel(sat);
   function time12(hm) {
     const [h, m] = hm.split(':').map(Number);
     return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM');
@@ -379,7 +392,11 @@
   function renderCantor() {
     const b = state.blocks[0];
     const open = b.masses.some((m) => !m.cantors.some((c) => c.mine) && m.cantors.length < m.needed);
-    return '<h1>' + range(b) + '</h1>' + (open ? '<p class="sub">Tap Sign up for any open Mass.</p>' : '') +
+    const backable = state.backups && b.masses.some((m) => !m.backup && !m.cantors.some((c) => c.mine) && m.cantors.length >= m.needed);
+    const tip = open && backable ? 'Tap Sign up for any open Mass, or Be backup for a full one, in case its cantor can’t make it.'
+      : open ? 'Tap Sign up for any open Mass.'
+      : backable ? 'Every Mass has its cantors. Tap Be backup to take one over if its cantor can’t make it.' : '';
+    return '<h1>' + range(b) + '</h1>' + (tip ? '<p class="sub">' + tip + '</p>' : '') +
       (b.masses.length ? renderMasses(b.masses) : '<p class="empty">No Masses left in this block.</p>');
   }
 
@@ -434,7 +451,8 @@
       if (m.date !== day) {
         const newWeek = !day || weekOf(m.date) !== weekOf(day);
         if (day && newWeek) h += '<hr class="week">';
-        if (newWeek && withMusic) h += musicBox(satOf(m.date));
+        if (newWeek && withMusic) h += musicBox(satOf(m.date)) + cantLine(satOf(m.date));
+        if (newWeek && !state.admin) h += cantBox(satOf(m.date), masses);
         day = m.date;
         h += '<div class="day">' + fullDayLabel(day) + '</div>';
       }
@@ -450,14 +468,49 @@
 
   function cantorMass(m) {
     const mine = m.cantors.some((c) => c.mine);
+    const bk = m.backup; // only from scripts that have backups
+    const standby = !!(bk && bk.mine);
     const names = m.cantors.map((c) => c.mine ? '<strong>You</strong>' : esc(c.name)).join(', ');
-    const act = mine
-      ? '<button class="quiet" data-act="drop" data-id="' + esc(m.id) + '">Drop</button>'
-      : m.cantors.length < m.needed ? '<button class="primary" data-act="signUp" data-id="' + esc(m.id) + '">Sign up</button>' : '';
-    return '<div class="' + massClass(m, mine) + '">' +
+    const backupLine = bk ? '<span class="backup">Backup: ' + (standby ? '<strong>You</strong>' : esc(bk.name)) + '</span>' : '';
+    const id = esc(m.id);
+    const act = mine || (standby && m.cantors.length >= m.needed)
+      ? '<button class="quiet" data-act="drop" data-id="' + id + '">Drop</button>'
+      : m.cantors.length < m.needed ? '<button class="primary" data-act="signUp" data-id="' + id + '">Sign up</button>'
+      : state.backups && !bk ? '<button data-act="backUp" data-id="' + id + '">Be backup</button>' : '';
+    return '<div class="' + massClass(m, mine) + (standby ? ' standby' : '') + '">' +
       '<div class="time">' + time12(m.time) + '</div>' +
-      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + '<span>' + names + '</span></div>' +
+      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + '<span>' + names + '</span>' + backupLine + '</div>' +
       '<div class="acts">' + checkIf(m) + act + '</div></div>';
+  }
+
+  // A cantor's view, above each week: who can't make it, and a way to say so (or take it back).
+  function cantBox(sat, masses) {
+    if (!state.backups || !Array.isArray(state.weeks)) return '';
+    const w = state.weeks.find((x) => x.sat === sat);
+    if (!w) return '';
+    const label = weekLabel(sat, masses);
+    const names = (w.mine ? ['<strong>You</strong>'] : []).concat(w.cantMake.map(esc));
+    if (!names.length && w.busy) return '';
+    const text = names.length ? 'Can’t make ' + label + ': ' + names.join(', ') : 'Can’t sing ' + label + '?';
+    const btn = w.mine ? '<button class="quiet" data-act="cantMake" data-v="' + esc(sat) + '" data-on="0">Undo</button>'
+      : w.busy ? ''
+      : '<button data-act="cantMake" data-v="' + esc(sat) + '" data-on="1">' + (names.length ? 'I can’t either' : 'Let everyone know') + '</button>';
+    return '<div class="cant"><span>' + text + '</span>' + btn + '</div>';
+  }
+
+  // The director's view, under each week's music: who can't make it, and (in the open period) who hasn't said.
+  function cantLine(sat) {
+    const w = state.weeks.find((x) => x.sat === sat);
+    if (!w || !Array.isArray(w.cantMake) || w.past || state.period.status === 'past') return '';
+    const nameOf = (code) => (state.cantors.find((c) => c.code === code) || { name: '?' }).name;
+    const parts = [];
+    if (w.cantMake.length) parts.push('<strong>Can’t make it:</strong> ' + w.cantMake.map((c) => esc(nameOf(c))).join(', '));
+    if (state.period.status === 'open') {
+      const answered = w.cantors.map((c) => c.code).concat(w.cantMake);
+      const quiet = state.cantors.filter((c) => !answered.includes(c.code));
+      if (quiet.length) parts.push('<strong>No reply yet:</strong> ' + quiet.map((c) => esc(c.name)).join(', '));
+    }
+    return parts.length ? '<p class="sub cantline">' + parts.join(' · ') + '</p>' : '';
   }
 
   function adminMass(m) {
@@ -469,14 +522,18 @@
     }
     const chips = m.cantors.map((c) =>
       '<span class="chip"><span>' + esc(c.name) + '</span><button title="Remove" data-act="adminDrop" data-id="' + id + '" data-code="' + esc(c.code) + '">×</button></span>').join('');
-    const taken = m.cantors.map((c) => c.code);
-    const assign = m.cantors.length < m.needed && state.cantors.length
-      ? '<select data-act="assign" data-id="' + id + '"><option value="">+ Cantor</option>' +
-        state.cantors.filter((c) => !taken.includes(c.code)).map((c) => '<option value="' + esc(c.code) + '">' + esc(c.name) + '</option>').join('') +
-        '</select>'
+    const bk = m.backup
+      ? '<span class="chip standby"><span>Backup: ' + esc(m.backup.name) + '</span><button title="Remove" data-act="adminDrop" data-id="' + id + '" data-code="' + esc(m.backup.code) + '">×</button></span>'
       : '';
+    const taken = m.cantors.map((c) => c.code);
+    const picker = (act, label) => '<select data-act="' + act + '" data-id="' + id + '"><option value="">' + label + '</option>' +
+      state.cantors.filter((c) => !taken.includes(c.code)).map((c) => '<option value="' + esc(c.code) + '">' + esc(c.name) + '</option>').join('') +
+      '</select>';
+    const assign = !state.cantors.length ? ''
+      : m.cantors.length < m.needed ? picker('assign', '+ Cantor')
+      : state.backups && !m.backup ? picker('assignBackup', '+ Backup') : '';
     return '<div class="' + massClass(m) + '"><div class="time">' + time12(m.time) + '</div>' +
-      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + chips + assign + '</div>' +
+      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + chips + bk + assign + '</div>' +
       '<div class="acts">' + checkIf(m) + '<button class="quiet trash" data-act="remove" data-confirm="Remove?" data-id="' + id + '" title="Remove this Mass" aria-label="Remove this Mass">' + TRASH + '</button></div></div>';
   }
 
@@ -495,7 +552,8 @@
   // Read only: tapping it asks whether to go back to the current period.
   function pastMass(m) {
     const who = m.removed ? 'Removed'
-      : m.cantors.length ? m.cantors.map((c) => '<span class="chip"><span>' + esc(c.name) + '</span></span>').join('')
+      : m.cantors.length ? m.cantors.map((c) => '<span class="chip"><span>' + esc(c.name) + '</span></span>').join('') +
+        (m.backup ? '<span class="chip standby"><span>Backup: ' + esc(m.backup.name) + '</span></span>' : '')
       : '<span class="sub">No cantor</span>';
     return '<div class="' + (m.removed ? 'mass removed' : massClass(m)) + '"><div class="time">' + time12(m.time) + '</div>' +
       '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + who + '</div>' +
@@ -505,15 +563,16 @@
   const copyMe = () => !!state.directorEmail && drafts[panel].me !== false;
 
   // The director, then every cantor, with a checkbox; the usual recipients start checked.
-  function recipientPicker(usual, singing = []) {
+  // tags: a note by some cantors' names, {code: 'singing'}.
+  function recipientPicker(usual, tags = {}) {
     const chosen = drafts[panel].to || usual;
     const me = state.directorEmail
       ? '<label class="pick"><input type="checkbox" data-me' + (copyMe() ? ' checked' : '') + '><span>You <small>a copy</small></span></label>'
       : '<label class="pick off"><input type="checkbox" disabled><span>You <small>add your email in Settings</small></span></label>';
     const rows = me + state.cantors.map((c) => c.email
       ? '<label class="pick"><input type="checkbox" data-pick value="' + esc(c.code) + '"' + (chosen.includes(c.code) ? ' checked' : '') + '>' +
-        '<span>' + esc(c.name) + (singing.includes(c.code) ? ' <small>singing</small>' : '') + '</span></label>'
-      : '<label class="pick off"><input type="checkbox" disabled><span>' + esc(c.name) + ' <small>' + (singing.includes(c.code) ? 'singing, ' : '') + 'no email</small></span></label>').join('');
+        '<span>' + esc(c.name) + (tags[c.code] ? ' <small>' + tags[c.code] + '</small>' : '') + '</span></label>'
+      : '<label class="pick off"><input type="checkbox" disabled><span>' + esc(c.name) + ' <small>' + (tags[c.code] ? tags[c.code] + ', ' : '') + 'no email</small></span></label>').join('');
     return '<div class="full"><span class="lbl">To: <button type="button" class="link" data-pickall="1">all</button> · ' +
       '<button type="button" class="link" data-pickall="0">none</button></span><div class="picks">' + rows + '</div></div>';
   }
@@ -580,7 +639,7 @@
       return '<div class="panel"><p class="sub intro">One email to everyone checked, starting with who’s singing which Mass that week (Monday through Sunday). Replies come to your email in Settings.</p><form data-form="sendWeekend">' +
         '<label class="full">Weekend<select name="weekendSat">' +
         weeks.map((x) => '<option value="' + esc(x.sat) + '"' + (x.sat === w.sat ? ' selected' : '') + '>' + weekendLabel(x.sat) + '</option>').join('') + '</select></label>' +
-        recipientPicker(usual, w.cantors.map((c) => c.code)) +
+        recipientPicker(usual, Object.fromEntries(w.cantors.map((c) => [c.code, c.backup ? 'backup' : 'singing']))) +
         '<label class="full">Subject<input name="subject" value="' + esc(d.subject == null ? 'Music for ' + weekendLabel(w.sat) : d.subject) + '"></label>' +
         richText('Message', d.message == null ? esc(music).replace(/\n/g, '<br>') : d.message) +
         sendButton(usual) +
@@ -590,7 +649,9 @@
       const up = state.upcoming;
       if (!up) return '<div class="panel"><p class="sub">No upcoming Masses are open for signups.</p></div>';
       const d = drafts.remind;
-      const usual = everyoneWithEmail();
+      // Those who said they can't make that week start unchecked.
+      const cant = Array.isArray(up.cantMake) ? up.cantMake : [];
+      const usual = everyoneWithEmail().filter((code) => !cant.includes(code));
       const open = up.masses.filter((m) => m.cantors.length < m.needed).length;
       const rows = up.masses.map((m) => {
         const left = m.needed - m.cantors.length;
@@ -604,7 +665,7 @@
           ? 'Each person gets their own email with this list and their sign-up link.'
           : 'Every Mass that weekend already has its cantors.') + '</p><form data-form="sendReminder">' +
         '<div class="full"><span class="lbl">The weekend of ' + weekendLabel(up.sat) + '</span><table class="slots">' + rows + '</table></div>' +
-        recipientPicker(usual) +
+        recipientPicker(usual, Object.fromEntries(cant.map((code) => [code, 'can’t make it']))) +
         '<label class="full">Subject<input name="subject" value="' + esc(d.subject == null ? 'Cantors needed: ' + weekendLabel(up.sat) : d.subject) + '"></label>' +
         richText('Message after the link (optional)', d.message) +
         sendButton(usual, !open) +
@@ -640,6 +701,8 @@
     location.replace(location.pathname + '?' + p + '#new-link');
   }
 
+  const weeksText = (n) => ({ 1: 'one week', 3: 'three weeks', 4: 'four weeks' })[n] || 'two weeks';
+
   const DAY_NAMES = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
   function massRow(m) {
@@ -658,19 +721,25 @@
     let zones = [];
     try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) { /* older browsers */ }
     if (!zones.includes(tz)) zones.unshift(tz);
-    // A new parish starts its two-week periods on the most recent Saturday.
+    // A new parish starts its periods on the most recent Saturday.
     const today = new Date();
     const lastSat = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 1) % 7))).toISOString().slice(0, 10);
     const first = setup ? lastSat : p.firstBlockSaturday;
     return '<div class="panel"><form data-form="saveSite"><h3>Parish</h3>' +
-      '<label class="grow">Name<input name="siteName" required value="' + esc(setup ? '' : p.name) + '" placeholder="St. Cecilia Cantors"></label>' +
+      '<label class="grow">Name<input name="siteName" required value="' + esc(setup ? '' : p.name) + '" placeholder="e.g. Your Parish Cantors"></label>' +
       '<label>Color<input type="color" name="siteColor" value="' + esc(p.color) + '"></label>' +
       '<label class="full">Time zone<select name="siteTz">' + zones.map((z) => '<option' + (z === tz ? ' selected' : '') + '>' + esc(z) + '</option>').join('') + '</select></label>' +
       '<label class="full">Weekly Masses<small>The ones every weekend. Add holy days and other one-off Masses with the Add a Mass button.</small></label>' +
       '<div class="full" id="massRows">' + p.regularMasses.map(massRow).join('') + '</div>' +
       '<button type="button" class="quiet" data-act="addMassRow" style="color:var(--blue)">+ Add a weekly Mass</button>' +
+      // Older scripts have no setting for it (always two weeks).
+      ('weeksPerPeriod' in p
+        ? '<label class="full">Weeks at a time<select name="siteWeeks">' + [1, 2, 3, 4].map((n) =>
+            '<option value="' + n + '"' + (n === p.weeksPerPeriod ? ' selected' : '') + '>' + n + (n === 1 ? ' week' : ' weeks') + '</option>').join('') + '</select>' +
+          '<small>How many weeks cantors can sign up for at once.' + (setup ? '' : ' Changing it keeps the current period’s start; it just gets longer or shorter.') + '</small></label>'
+        : '') +
       '<label class="full">First Saturday<input type="date" name="siteFirst" required value="' + esc(first) + '">' +
-      '<small>Sign-ups open two weeks at a time, starting on this Saturday.' + (setup ? '' : ' Changing it, or the Mass times, after people have signed up hides their sign-ups for Masses that no longer match.') + '</small></label>' +
+      '<small>Sign-ups open ' + weeksText(p.weeksPerPeriod) + ' at a time, starting on this Saturday.' + (setup ? '' : ' Changing it, or the Mass times, after people have signed up hides their sign-ups for Masses that no longer match.') + '</small></label>' +
       '<button class="primary">Save parish</button></form></div>';
   }
 
@@ -685,7 +754,7 @@
     return '<div class="panel"><form data-form="saveSettings"><h3>You</h3>' +
       '<label class="full">Your email<input name="myEmail" type="email" autocomplete="email" value="' + esc(state.directorEmail || state.ownerEmail) + '">' +
       (suggested ? '<small>This is the Sheet owner’s address. Change it if you use a different one, then Save.</small>' : '') + '</label>' +
-      '<label class="full">Signature (optional)<textarea name="signature" rows="3" placeholder="Your name, Music Director">' + esc(state.signature) + '</textarea>' +
+      '<label class="full">Signature (optional)<textarea name="signature" rows="3" placeholder="e.g. Your Name, Music Director">' + esc(state.signature) + '</textarea>' +
       '<small>Goes at the end of the sign-up, weekend, and reminder emails.</small></label>' +
       '<label class="pick" style="flex-basis:100%"><input type="checkbox" name="digest"' + (state.digest ? ' checked' : '') + '>' +
       '<span>Email me a digest when signups change</span></label>' +
@@ -725,6 +794,61 @@
 
   const pastDlg = document.getElementById('pastDlg');
   pastDlg.addEventListener('close', () => { if (pastDlg.returnValue === 'ok') go(''); });
+
+  // Asks a question with buttons [{v, label, primary}]; then(v) runs for any but Cancel.
+  const askDlg = document.getElementById('askDlg');
+  let askThen = null;
+  function ask(text, buttons, then) {
+    document.getElementById('askText').textContent = text;
+    document.getElementById('askBtns').innerHTML = '<button value="cancel" class="quiet">Cancel</button>' +
+      buttons.map((b) => '<button value="' + esc(b.v) + '" class="' + (b.primary ? 'primary' : '') + '">' + esc(b.label) + '</button>').join('');
+    askThen = then;
+    askDlg.returnValue = '';
+    askDlg.showModal();
+  }
+  askDlg.addEventListener('close', () => {
+    const v = askDlg.returnValue;
+    const then = askThen;
+    askThen = null;
+    if (then && v && v !== 'cancel') then(v);
+  });
+
+  const massById = (id) => state.blocks[0].masses.concat(state.later || []).find((m) => m.id === id);
+
+  // A cantor dropping a Mass that has a backup: say who takes over first.
+  function dropMine(id) {
+    const m = massById(id);
+    const bk = m && m.cantors.some((c) => c.mine) && m.backup;
+    if (!bk) return call('drop', [id]);
+    ask(bk.name + ' is your backup and will take this Mass. We’ll email you both.', [{ v: 'drop', label: 'Drop', primary: true }],
+      () => call('drop', [id]));
+  }
+
+  // The director removing a cantor from a Mass with a backup: move the backup in, or not (to put someone else in).
+  function adminDrop(id, code) {
+    const m = massById(id);
+    const bk = m && m.backup;
+    if (!bk || bk.code === code) return call('drop', [id, code]);
+    const first = bk.name.split(' ')[0];
+    ask('Move ' + bk.name + ' (the backup) in? We’ll email them, copying you and the cantor you’re removing.',
+      [{ v: 'just', label: 'Just remove' }, { v: 'move', label: 'Move ' + first + ' in', primary: true }],
+      (v) => call('drop', [id, code, v === 'move']));
+  }
+
+  // Opened from the reminder email's "can't sing this weekend" link.
+  function cantFromEmail(sat) {
+    const p = new URLSearchParams(location.search);
+    p.delete('cant');
+    try { history.replaceState(null, '', location.pathname + '?' + p); } catch (e) { /* the link just stays */ }
+    if (state.admin || !state.backups || !Array.isArray(state.weeks)) return;
+    const w = state.weeks.find((x) => x.sat === sat);
+    const label = weekLabel(sat, state.blocks[0].masses);
+    if (!w) return show('That weekend is over.');
+    if (w.mine) return show('You already said you can’t make ' + label + '.');
+    if (w.busy) return show('You’re signed up for a Mass that week. Drop it first if you can’t make it.', 8000);
+    ask('Let everyone know you can’t sing ' + label + '?', [{ v: 'yes', label: 'I can’t make it', primary: true }],
+      () => call('cantMake', [sat, true]));
+  }
 
   async function call(fn, args = [], onOk, busyText = 'Saving…') {
     document.body.classList.add('busy');
@@ -770,6 +894,7 @@
       state = await api('getState');
       if (first && state.needsSetup) panel = 'settings';
       render();
+      if (first && CANT) cantFromEmail(CANT);
       if (location.hash === '#new-link') {
         history.replaceState(null, '', location.pathname + location.search);
         show('This is your new director link. Bookmark it now: the old one no longer works.', 12000);
@@ -838,8 +963,10 @@
     const { act, id, code, v } = b.dataset;
     if (b.dataset.confirm && !armed(b)) return;
     if (act === 'signUp') call('signUp', [id]);
-    else if (act === 'drop') call('drop', [id]);
-    else if (act === 'adminDrop') call('drop', [id, code]);
+    else if (act === 'drop') dropMine(id);
+    else if (act === 'backUp') call('backUp', [id]);
+    else if (act === 'cantMake') call('cantMake', [v, b.dataset.on === '1']);
+    else if (act === 'adminDrop') adminDrop(id, code);
     else if (act === 'remove') call('removeMass', [id]);
     else if (act === 'restore') call('restoreMass', [id]);
     else if (act === 'removeCantor') call('removeCantor', [code]);
@@ -858,6 +985,7 @@
   document.addEventListener('change', (e) => {
     const el = e.target;
     if (el.dataset.act === 'assign' && el.value) call('signUp', [el.dataset.id, el.value]);
+    if (el.dataset.act === 'assignBackup' && el.value) call('backUp', [el.dataset.id, el.value]);
     if (el.dataset.music) {
       const sat = el.dataset.music;
       const w = state.weeks.find((x) => x.sat === sat);
@@ -903,6 +1031,7 @@
         color: f.elements.siteColor.value,
         timeZone: f.elements.siteTz.value,
         firstBlockSaturday: val('siteFirst'),
+        weeksPerPeriod: f.elements.siteWeeks ? Number(f.elements.siteWeeks.value) : undefined,
         regularMasses: days.map((day, i) => ({ day, time: times[i] })),
       }], () => (panel = firstTime ? 'cantors' : ''));
     } else if (f.dataset.form === 'saveSettings') {
