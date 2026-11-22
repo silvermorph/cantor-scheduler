@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <!-- Only this page's own scripts run (dev/site.js fills in their hashes), so markup that slips
      into the page from a server response can't run code. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wSYcMourBPtYLB55GZ6hsdltW6w5R5T84S2CbW5WSro='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-uTlS86S6t6f26ucvtSn6HTENHO9AVa5zyNWTzFUiG4c='; connect-src 'self' https://script.google.com https://script.googleusercontent.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Cantor Scheduler</title>
@@ -42,6 +42,22 @@
   .mass.standby { box-shadow: inset 4px 0 0 var(--tint-line); }
   .backup { flex-basis: 100%; color: var(--muted); font-size: 13px; }
   .chip.standby { background: none; box-shadow: inset 0 0 0 1px var(--tint-line); font-weight: 400; }
+  /* A place the director is holding for someone they'll name later. */
+  .chip.reserved { background: none; border: 1px dashed var(--tint-line); color: var(--muted); font-weight: 400; }
+  .reserved { color: var(--muted); font-style: italic; }
+  .calline { flex-basis: 100%; font-size: 13px; }
+  /* How many Masses each cantor has sung, in the Cantor list. */
+  .counts { margin-top: 18px; }
+  .counts .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; margin-bottom: 6px; }
+  .counts .head h3 { margin: 0; flex-basis: auto; }
+  .counts .scroll { overflow-x: auto; }
+  .counts table { border-collapse: collapse; font-size: 14px; width: 100%; }
+  .counts th, .counts td { padding: 5px 6px; text-align: center; border-bottom: 1px solid var(--line); }
+  .counts th { font-size: 12px; font-weight: 600; color: var(--muted); line-height: 1.25; vertical-align: bottom; }
+  .counts th:first-child, .counts td:first-child { text-align: left; padding-left: 0; }
+  .counts td:first-child { min-width: 6.5em; }
+  .counts td.zero { color: var(--line); }
+  .counts .total { font-weight: 700; }
   /* Above each week: who can't make it, and a way to say you can't. */
   .cant { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 18px 0 0; font-size: 14px; color: var(--muted); }
   .cant span { flex: 1 1 200px; }
@@ -93,6 +109,10 @@
   .rte-body { min-height: 120px; padding: 8px 10px; outline: none; overflow-wrap: anywhere; }
   .rte-body ul, .rte-body ol { margin: 4px 0; padding-left: 24px; }
   .rte-body p { margin: 0 0 8px; }
+  .rte-body a { color: var(--blue); }
+  .rte-tools .ln { text-decoration: underline; color: var(--blue); }
+  #linkDlg label { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  #linkDlg input { width: 100%; font-size: 16px; }
   .music { display: block; margin: 18px 0 0; }
   .music .lbl { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
   .music textarea { width: 100%; }
@@ -130,7 +150,9 @@
   dialog { border: none; border-radius: 10px; padding: 20px; max-width: min(360px, calc(100% - 32px)); box-shadow: 0 8px 32px rgba(0,0,0,.25); }
   dialog::backdrop { background: rgba(20,25,50,.4); }
   dialog p { margin: 0 0 18px; }
-  dialog form { display: flex; justify-content: flex-end; gap: 8px; }
+  dialog form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  /* Links as choices (add to calendar): stacked full width, above Cancel. */
+  dialog form a { order: -1; flex: 1 1 100%; text-align: center; border: 1px solid var(--blue); background: var(--blue); color: #fff; font-weight: 600; border-radius: 6px; padding: 10px 14px; text-decoration: none; }
 
   #status { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: #1d2b66; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 15px; max-width: calc(100% - 32px); display: none; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
   #status.show { display: block; }
@@ -280,6 +302,10 @@
 </section>
 <div id="status"></div>
 <dialog id="askDlg"><p id="askText"></p><form method="dialog" id="askBtns"></form></dialog>
+<dialog id="linkDlg"><form method="dialog">
+  <label>Link to<input id="linkUrl" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://www.youtube.com/…"></label>
+  <button value="unlink" class="quiet" id="unlinkBtn">Remove link</button><button value="cancel" class="quiet">Cancel</button><button value="ok" class="primary">OK</button>
+</form></dialog>
 <dialog id="pastDlg"><p>This period is already complete. Return to the current sign-up period?</p>
   <form method="dialog"><button value="cancel" class="quiet">Cancel</button><button value="ok" class="primary">OK</button></form></dialog>
 
@@ -288,7 +314,7 @@
   // name their own script (?s=deployment ID); otherwise it's this installation's, built in.
   const SHARED = true;
   // The newest library build, on the shared page: a director whose copy runs an older one is told.
-  const LATEST_BUILD = 'dac3c5fa3405404c';
+  const LATEST_BUILD = '6aea8b29d261d475';
   const PARAMS = new URLSearchParams(location.search);
   const KEY = PARAMS.get('k') || '';
   // From the reminder email's "can't sing this weekend" link: that week's Saturday.
@@ -392,7 +418,7 @@
   function renderCantor() {
     const b = state.blocks[0];
     const open = b.masses.some((m) => !m.cantors.some((c) => c.mine) && m.cantors.length < m.needed);
-    const backable = state.backups && b.masses.some((m) => !m.backup && !m.cantors.some((c) => c.mine) && m.cantors.length >= m.needed);
+    const backable = state.backups && b.masses.some((m) => !m.backup && !m.cantors.some((c) => c.mine || c.reserved) && m.cantors.length >= m.needed);
     const tip = open && backable ? 'Tap Sign up for any open Mass, or Be backup for a full one, in case its cantor can’t make it.'
       : open ? 'Tap Sign up for any open Mass.'
       : backable ? 'Every Mass has its cantors. Tap Be backup to take one over if its cantor can’t make it.' : '';
@@ -470,16 +496,17 @@
     const mine = m.cantors.some((c) => c.mine);
     const bk = m.backup; // only from scripts that have backups
     const standby = !!(bk && bk.mine);
-    const names = m.cantors.map((c) => c.mine ? '<strong>You</strong>' : esc(c.name)).join(', ');
+    const names = m.cantors.map((c) => c.mine ? '<strong>You</strong>' : c.reserved ? '<span class="reserved">Reserved</span>' : esc(c.name)).join(', ');
     const backupLine = bk ? '<span class="backup">Backup: ' + (standby ? '<strong>You</strong>' : esc(bk.name)) + '</span>' : '';
     const id = esc(m.id);
     const act = mine || (standby && m.cantors.length >= m.needed)
       ? '<button class="quiet" data-act="drop" data-id="' + id + '">Drop</button>'
       : m.cantors.length < m.needed ? '<button class="primary" data-act="signUp" data-id="' + id + '">Sign up</button>'
-      : state.backups && !bk ? '<button data-act="backUp" data-id="' + id + '">Be backup</button>' : '';
+      : state.backups && !bk && !m.cantors.some((c) => c.reserved) ? '<button data-act="backUp" data-id="' + id + '">Be backup</button>' : '';
+    const cal = mine || standby ? '<span class="calline"><button class="link" data-act="calendar" data-id="' + id + '">Add to calendar</button></span>' : '';
     return '<div class="' + massClass(m, mine) + (standby ? ' standby' : '') + '">' +
       '<div class="time">' + time12(m.time) + '</div>' +
-      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + '<span>' + names + '</span>' + backupLine + '</div>' +
+      '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + '<span>' + names + '</span>' + backupLine + cal + '</div>' +
       '<div class="acts">' + checkIf(m) + act + '</div></div>';
   }
 
@@ -521,16 +548,21 @@
         '<div class="info">Removed</div><div class="acts"><button class="quiet" data-act="restore" data-id="' + id + '">Restore</button></div></div>';
     }
     const chips = m.cantors.map((c) =>
-      '<span class="chip"><span>' + esc(c.name) + '</span><button title="Remove" data-act="adminDrop" data-id="' + id + '" data-code="' + esc(c.code) + '">×</button></span>').join('');
+      '<span class="chip' + (c.reserved ? ' reserved' : '') + '"><span>' + esc(c.name) + '</span><button title="Remove" data-act="adminDrop" data-id="' + id + '" data-code="' + esc(c.code) + '">×</button></span>').join('');
     const bk = m.backup
       ? '<span class="chip standby"><span>Backup: ' + esc(m.backup.name) + '</span><button title="Remove" data-act="adminDrop" data-id="' + id + '" data-code="' + esc(m.backup.code) + '">×</button></span>'
       : '';
     const taken = m.cantors.map((c) => c.code);
-    const picker = (act, label) => '<select data-act="' + act + '" data-id="' + id + '"><option value="">' + label + '</option>' +
+    const open = m.cantors.length < m.needed;
+    // Reserved holds a place for someone the director names later: picking a cantor here fills it.
+    const held = m.cantors.some((c) => c.reserved);
+    const picker = (act, label, reserve) => '<select data-act="' + act + '" data-id="' + id + '"><option value="">' + label + '</option>' +
+      (reserve ? '<option value="reserved">Reserved (name later)</option>' : '') +
       state.cantors.filter((c) => !taken.includes(c.code)).map((c) => '<option value="' + esc(c.code) + '">' + esc(c.name) + '</option>').join('') +
       '</select>';
-    const assign = !state.cantors.length ? ''
-      : m.cantors.length < m.needed ? picker('assign', '+ Cantor')
+    const assign = open && state.reserved ? picker('assign', '+ Cantor', true)
+      : !state.cantors.length ? ''
+      : open || held ? picker('assign', '+ Cantor')
       : state.backups && !m.backup ? picker('assignBackup', '+ Backup') : '';
     return '<div class="' + massClass(m) + '"><div class="time">' + time12(m.time) + '</div>' +
       '<div class="info">' + (m.name ? '<div class="title">' + esc(m.name) + '</div>' : '') + chips + bk + assign + '</div>' +
@@ -552,7 +584,7 @@
   // Read only: tapping it asks whether to go back to the current period.
   function pastMass(m) {
     const who = m.removed ? 'Removed'
-      : m.cantors.length ? m.cantors.map((c) => '<span class="chip"><span>' + esc(c.name) + '</span></span>').join('') +
+      : m.cantors.length ? m.cantors.map((c) => '<span class="chip' + (c.reserved ? ' reserved' : '') + '"><span>' + esc(c.name) + '</span></span>').join('') +
         (m.backup ? '<span class="chip standby"><span>Backup: ' + esc(m.backup.name) + '</span></span>' : '')
       : '<span class="sub">No cantor</span>';
     return '<div class="' + (m.removed ? 'mass removed' : massClass(m)) + '"><div class="time">' + time12(m.time) + '</div>' +
@@ -601,6 +633,7 @@
       '<button type="button" data-cmd="bold" title="Bold"><b>B</b></button>' +
       '<button type="button" data-cmd="italic" title="Italic"><i>I</i></button>' +
       '<button type="button" data-cmd="highlight" title="Highlight"><span class="hl">H</span></button>' +
+      (state.links ? '<button type="button" data-cmd="link" title="Link"><span class="ln">Link</span></button>' : '') +
       '<button type="button" data-cmd="insertUnorderedList" title="Bullets">• List</button>' +
       '<button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button></div>' +
       '<div class="rte-body" id="msg" contenteditable="true" role="textbox" aria-multiline="true" aria-label="' + label + '">' + html + '</div></div></div>';
@@ -779,9 +812,43 @@
         '<form data-form="addCantor" style="margin-top:12px">' +
         '<label class="grow">Name<input name="name" required autocomplete="off"></label>' +
         '<label class="grow">Email<input name="email" type="email" autocomplete="off"></label>' +
-        '<button class="primary">Add</button></form></div>';
+        '<button class="primary">Add</button></form>' + countsTable() + '</div>';
     }
     return '';
+  }
+
+  // How many Masses each cantor has sung, by weekly Mass (any other Masses together), in the past
+  // few months, year, or ever. Most first.
+  let countsMonths = '12';
+  function countsTable() {
+    if (!Array.isArray(state.sung) || !state.cantors.length) return '';
+    let from = '';
+    if (countsMonths) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - Number(countsMonths));
+      from = d.toISOString().slice(0, 10);
+    }
+    const sung = state.sung.filter((s) => s[0] >= from);
+    // The weekly Masses, plus any weekly times since changed that have counts, Monday to Sunday.
+    const weekly = state.parish.regularMasses.map((r) => r.day.slice(0, 3) + ' ' + r.time);
+    const ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const slots = weekly.concat(sung.map((s) => s[1]).filter((x) => x && !weekly.includes(x)))
+      .filter((x, i, all) => all.indexOf(x) === i)
+      .sort((a, b) => ORDER.indexOf(a.slice(0, 3)) - ORDER.indexOf(b.slice(0, 3)) || a.localeCompare(b));
+    const cols = slots.concat(['']);
+    const rows = state.cantors.map((c) => {
+      const mine = sung.filter((s) => s[2] === c.code);
+      return { name: c.name, by: cols.map((k) => mine.filter((s) => s[1] === k).length), total: mine.length };
+    }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    const short = (hm) => time12(hm).replace(':00', '');
+    const head = cols.map((k) => '<th>' + (k ? esc(k.slice(0, 3)) + '<br>' + short(k.slice(4)) : 'Other<br>Masses') + '</th>').join('');
+    const cell = (n, cls = '') => '<td class="' + cls + (n ? '' : ' zero') + '">' + n + '</td>';
+    const opt = (v, label) => '<option value="' + v + '"' + (countsMonths === v ? ' selected' : '') + '>' + label + '</option>';
+    return '<div class="counts"><div class="head"><h3>Masses sung</h3>' +
+      '<select data-act="countsMonths" aria-label="Since">' + opt('3', 'Past 3 months') + opt('12', 'Past year') + opt('', 'All time') + '</select></div>' +
+      '<div class="scroll"><table><thead><tr><th></th>' + head + '<th>Total</th></tr></thead><tbody>' +
+      rows.map((r) => '<tr><td>' + esc(r.name) + '</td>' + r.by.map((n) => cell(n)).join('') + cell(r.total, 'total') + '</tr>').join('') +
+      '</tbody></table></div></div>';
   }
 
   // ---------------------------------------------------------------- actions
@@ -828,11 +895,60 @@
   function adminDrop(id, code) {
     const m = massById(id);
     const bk = m && m.backup;
-    if (!bk || bk.code === code) return call('drop', [id, code]);
+    if (!bk || bk.code === code || code === 'reserved') return call('drop', [id, code]);
     const first = bk.name.split(' ')[0];
     ask('Move ' + bk.name + ' (the backup) in? We’ll email them, copying you and the cantor you’re removing.',
       [{ v: 'just', label: 'Just remove' }, { v: 'move', label: 'Move ' + first + ' in', primary: true }],
       (v) => call('drop', [id, code, v === 'move']));
+  }
+
+  // A cantor's own Mass, for their calendar: Google Calendar's new-event page, or an .ics file
+  // for Apple Calendar, Outlook and the rest. An hour long.
+  function addToCalendar(id) {
+    const m = massById(id);
+    if (!m) return;
+    const backup = !m.cantors.some((c) => c.mine);
+    const title = (backup ? 'Backup cantor: ' : 'Cantor: ') + (m.name || time12(m.time) + ' Mass');
+    const start = calTime(m.date, m.time);
+    const end = calTime(m.date, m.time, 60);
+    const place = state.site && state.site.name ? state.site.name : '';
+    const google = 'https://calendar.google.com/calendar/render?action=TEMPLATE&text=' + encodeURIComponent(title) +
+      '&dates=' + start + '/' + end + (place ? '&details=' + encodeURIComponent(place) : '');
+    const icsText = (s) => String(s).replace(/[\\;,]/g, (c) => '\\' + c).replace(/\r?\n/g, '\\n');
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Cantor Scheduler//EN', 'BEGIN:VEVENT',
+      'UID:' + m.id.replace(/[^\w-]/g, '') + '@cantorscheduler', 'DTSTAMP:' + new Date().toISOString().replace(/[-:]|\.\d+/g, ''),
+      'DTSTART:' + start, 'DTEND:' + end, 'SUMMARY:' + icsText(title)].concat(place ? ['DESCRIPTION:' + icsText(place)] : [])
+      .concat(['END:VEVENT', 'END:VCALENDAR']).join('\r\n');
+    ask('Add ' + dayLabel(m.date) + ', ' + time12(m.time) + ' to your calendar:', [], null);
+    document.getElementById('askBtns').insertAdjacentHTML('beforeend',
+      '<a href="' + esc(google) + '" target="_blank" rel="noopener">Google Calendar</a>' +
+      '<a href="data:text/calendar;charset=utf-8,' + esc(encodeURIComponent(ics)) + '" download="mass.ics">Apple, Outlook, other</a>');
+    document.querySelectorAll('#askBtns a').forEach((a) => a.addEventListener('click', () => setTimeout(() => askDlg.close(), 300)));
+  }
+
+  // A Mass's date and time (in the parish's time zone, minutes later) as a calendar's UTC time,
+  // 20261220T141500Z. Without a known zone, the time as it reads, which calendars take as the phone's own.
+  function calTime(ymd, hm, minutes = 0) {
+    const [y, mo, d] = ymd.split('-').map(Number);
+    const [h, mi] = hm.split(':').map(Number);
+    const wall = Date.UTC(y, mo - 1, d, h, mi + minutes);
+    const fmt = (t, z) => new Date(t).toISOString().replace(/[-:]|\.\d+/g, '').replace('Z', z);
+    try {
+      const tz = state.site && state.site.timeZone;
+      if (!tz) throw new Error('no zone');
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric',
+        day: 'numeric', hour: 'numeric', minute: 'numeric' });
+      // How far the zone's clock is from UTC at time t.
+      const offset = (t) => {
+        const p = {};
+        parts.formatToParts(new Date(t)).forEach((x) => (p[x.type] = Number(x.value)));
+        return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - t;
+      };
+      const guess = wall - offset(wall);
+      return fmt(wall - offset(guess), 'Z');
+    } catch (e) {
+      return fmt(wall, '');
+    }
   }
 
   // Opened from the reminder email's "can't sing this weekend" link.
@@ -965,6 +1081,7 @@
     if (act === 'signUp') call('signUp', [id]);
     else if (act === 'drop') dropMine(id);
     else if (act === 'backUp') call('backUp', [id]);
+    else if (act === 'calendar') addToCalendar(id);
     else if (act === 'cantMake') call('cantMake', [v, b.dataset.on === '1']);
     else if (act === 'adminDrop') adminDrop(id, code);
     else if (act === 'remove') call('removeMass', [id]);
@@ -986,6 +1103,7 @@
     const el = e.target;
     if (el.dataset.act === 'assign' && el.value) call('signUp', [el.dataset.id, el.value]);
     if (el.dataset.act === 'assignBackup' && el.value) call('backUp', [el.dataset.id, el.value]);
+    if (el.dataset.act === 'countsMonths') { countsMonths = el.value; render(); }
     if (el.dataset.music) {
       const sat = el.dataset.music;
       const w = state.weeks.find((x) => x.sat === sat);
@@ -1078,7 +1196,7 @@
     document.querySelectorAll('[data-cmd]').forEach((b) => {
       const c = b.dataset.cmd;
       let on = false;
-      try { on = c === 'highlight' ? highlighted() : document.queryCommandState(c); } catch (e) {}
+      try { on = c === 'highlight' ? highlighted() : c === 'link' ? !!linkAt() : document.queryCommandState(c); } catch (e) {}
       b.classList.toggle('on', on);
     });
   }
@@ -1091,6 +1209,7 @@
       sel.removeAllRanges();
       sel.addRange(savedRange);
     }
+    if (cmd === 'link') return openLink();
     if (cmd === 'highlight') {
       const color = highlighted() ? 'transparent' : HL;
       document.execCommand('styleWithCSS', false, true);
@@ -1103,7 +1222,71 @@
     updateTools();
   }
 
-  // Pasted text keeps bold, italic, underline, highlight, and lists; fonts, colors, and links go.
+  // The link the cursor is in, if any.
+  function linkAt() {
+    const sel = getSelection();
+    for (let n = sel.anchorNode; n && n !== editor(); n = n.parentNode) if (n.nodeName === 'A') return n;
+    return null;
+  }
+
+  // A web address as typed, with https:// added if it has no scheme; '' if it isn't one.
+  function webAddress(s) {
+    s = s.trim();
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s.replace(/^\/+/, '');
+    try {
+      const u = new URL(s);
+      return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && !/[\s"'<>]/.test(s) ? s : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Link: makes the selected words a link, or puts in the address itself; inside a link, changes or removes it.
+  const linkDlg = document.getElementById('linkDlg');
+  const linkUrl = document.getElementById('linkUrl');
+  let editingLink = null;
+  function openLink() {
+    editingLink = linkAt();
+    const picked = String(getSelection());
+    linkUrl.value = editingLink ? editingLink.getAttribute('href') : webAddress(picked) ? picked.trim() : '';
+    document.getElementById('unlinkBtn').hidden = !editingLink;
+    linkDlg.returnValue = '';
+    linkDlg.showModal();
+    linkUrl.focus();
+  }
+  linkUrl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); linkDlg.close('ok'); }
+  });
+  linkDlg.addEventListener('close', () => {
+    const v = linkDlg.returnValue;
+    const a = editingLink;
+    editingLink = null;
+    const ed = editor();
+    if (!ed || (v !== 'ok' && v !== 'unlink')) return;
+    if (v === 'unlink') {
+      if (a) a.replaceWith(...a.childNodes);
+    } else {
+      const url = webAddress(linkUrl.value);
+      if (!url) return linkUrl.value.trim() && show('That doesn’t look like a web address.');
+      if (a) {
+        a.setAttribute('href', url);
+      } else {
+        ed.focus();
+        const sel = getSelection();
+        if (savedRange) {
+          sel.removeAllRanges();
+          sel.addRange(savedRange);
+        }
+        if (sel.isCollapsed) document.execCommand('insertHTML', false, '<a href="' + esc(url) + '">' + esc(url) + '</a>&nbsp;');
+        else document.execCommand('createLink', false, url);
+      }
+    }
+    drafts[panel].message = ed.innerHTML;
+    updateTools();
+  });
+
+  // Pasted text keeps bold, italic, underline, highlight, lists, and web links (when the script
+  // keeps them); fonts and colors go.
   function cleanPaste(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const walk = (n) => {
@@ -1119,6 +1302,8 @@
       if (/^(i|em)$/.test(tag) || st.fontStyle === 'italic') inner = '<i>' + inner + '</i>';
       if (tag === 'u') inner = '<u>' + inner + '</u>';
       if (tag === 'mark' || shows(st.backgroundColor)) inner = '<span style="background-color:' + HL + '">' + inner + '</span>';
+      const href = tag === 'a' && state && state.links ? webAddress(n.getAttribute('href') || '') : '';
+      if (href && /^https?:/i.test(n.getAttribute('href'))) inner = '<a href="' + esc(href) + '">' + inner + '</a>';
       if (/^(ul|ol|li)$/.test(tag)) return '<' + tag + '>' + inner + '</' + tag + '>';
       if (/^(p|div|h[1-6]|blockquote|tr)$/.test(tag)) return '<div>' + inner + '</div>';
       return inner;
